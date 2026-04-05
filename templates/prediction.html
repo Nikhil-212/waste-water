@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prediction - AquaTrack</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h2><i class="fas fa-tint"></i> AquaTrack</h2>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
+                <li><a href="/form">Data Entry</a></li>
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/prediction" class="active">Prediction</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Water Usage Prediction</h1>
+        <p class="subtitle">AI-powered forecasting using Linear Regression</p>
+
+        <div class="prediction-result">
+            <h2>Predicted Water Usage Tomorrow</h2>
+            <p class="prediction-value" id="predictionValue">Loading...</p>
+            <p class="stat-label">liters</p>
+        </div>
+
+        <div class="chart-container">
+            <h3>Historical Data & Prediction Trend</h3>
+            <canvas id="predictionChart"></canvas>
+        </div>
+
+        <div class="info-section">
+            <h3>About the Prediction Model</h3>
+            <p>This system uses <strong>Linear Regression</strong> from scikit-learn to predict future water consumption based on historical usage patterns. The model analyzes daily consumption trends and forecasts the expected water usage for the next day.</p>
+            <p><strong>Note:</strong> Predictions become more accurate with more historical data. Ensure at least 3 days of data for reliable predictions.</p>
+        </div>
+    </div>
+
+    <script>
+        async function loadPrediction() {
+            try {
+                const response = await fetch('/api/predict');
+                const data = await response.json();
+
+                if (data.error) {
+                    document.getElementById('predictionValue').textContent = 'Insufficient Data';
+                    document.querySelector('.prediction-value').style.color = '#e74c3c';
+                    document.querySelector('.chart-container').innerHTML = '<p class="error">Need at least 3 data points for prediction. Please enter more data.</p>';
+                    return;
+                }
+
+                document.getElementById('predictionValue').textContent = data.prediction.toLocaleString();
+
+                // Create chart
+                const labels = data.historicalData.map(d => `Day ${d.day}`);
+                labels.push(`Day ${data.historicalData.length + 1} (Predicted)`);
+                
+                const historicalValues = data.historicalData.map(d => d.usage);
+                const allValues = [...historicalValues, data.prediction];
+
+                const ctx = document.getElementById('predictionChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Water Usage (L)',
+                            data: allValues,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            segment: {
+                                borderDash: ctx => ctx.p1DataIndex === historicalValues.length ? [5, 5] : []
+                            },
+                            pointBackgroundColor: (ctx) => {
+                                return ctx.dataIndex === historicalValues.length ? '#e74c3c' : '#3498db';
+                            },
+                            pointRadius: (ctx) => {
+                                return ctx.dataIndex === historicalValues.length ? 8 : 4;
+                            }
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: {
+                                display: true
+                            }
+                        }
+                    }
+                });
+
+            } catch (error) {
+                console.error('Error loading prediction:', error);
+                document.getElementById('predictionValue').textContent = 'Error';
+            }
+        }
+
+        loadPrediction();
+    </script>
+</body>
+</html>

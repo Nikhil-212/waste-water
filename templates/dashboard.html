@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - AquaTrack</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-container">
+            <h2><i class="fas fa-tint"></i> AquaTrack</h2>
+            <ul class="nav-links">
+                <li><a href="/">Home</a></li>
+                <li><a href="/form">Data Entry</a></li>
+                <li><a href="/dashboard" class="active">Dashboard</a></li>
+                <li><a href="/prediction">Prediction</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="container">
+        <h1>Analytics Dashboard</h1>
+        <p class="subtitle">Water consumption insights and trends</p>
+
+        <!-- Date Filter -->
+        <div class="filter-section">
+            <label for="dateFilter">Filter by Date:</label>
+            <input type="date" id="dateFilter" />
+            <button onclick="loadDashboard()" class="btn btn-filter">Apply Filter</button>
+            <button onclick="clearFilter()" class="btn btn-clear">Show All</button>
+        </div>
+
+        <div id="alertBox" class="alert" style="display: none;"></div>
+
+        <!-- Sustainability Metrics -->
+        <h2 class="section-title">🌱 Sustainability Metrics</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Total Daily Usage</h3>
+                <p class="stat-value" id="totalUsage">-</p>
+                <p class="stat-label">liters</p>
+            </div>
+            <div class="stat-card">
+                <h3>Weekly Usage</h3>
+                <p class="stat-value" id="weeklyUsage">-</p>
+                <p class="stat-label">liters</p>
+            </div>
+            <div class="stat-card">
+                <h3>Water Saved</h3>
+                <p class="stat-value" id="waterSaved">-</p>
+                <p class="stat-label">vs yesterday</p>
+            </div>
+            <div class="stat-card efficiency-card">
+                <h3>Efficiency Score</h3>
+                <p class="stat-value" id="efficiencyScore">-</p>
+                <p class="stat-label" id="efficiencyCategory">-</p>
+            </div>
+        </div>
+
+        <!-- Key Metrics -->
+        <h2 class="section-title">Key Metrics</h2>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>Peak Usage Time</h3>
+                <p class="stat-value" id="peakTime">-</p>
+                <p class="stat-label">hours</p>
+            </div>
+            <div class="stat-card">
+                <h3>Per Student Footprint</h3>
+                <p class="stat-value" id="perStudentDaily">-</p>
+                <p class="stat-label">liters/student/day</p>
+            </div>
+            <div class="stat-card" id="tankRefillCard">
+                <h3>Tank Refill Prediction</h3>
+                <p class="stat-value" id="tankRefillHours">-</p>
+                <p class="stat-label">hours remaining</p>
+            </div>
+        </div>
+
+        <!-- Peak Usage Heatmap -->
+        <div class="chart-container">
+            <h3>📊 Peak Usage Heatmap (24-Hour)</h3>
+            <canvas id="heatmapChart"></canvas>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-container">
+                <h3>Water Usage vs Time</h3>
+                <canvas id="timeChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Daily Water Consumption</h3>
+                <canvas id="dailyChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Water Usage by Area</h3>
+                <canvas id="areaChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>Weekly Consumption Trend</h3>
+                <canvas id="weeklyChart"></canvas>
+            </div>
+        </div>
+
+        <div class="suggestions-section">
+            <h2>💡 Intelligent Conservation Recommendations</h2>
+            <ul id="suggestionsList"></ul>
+        </div>
+    </div>
+
+    <script>
+        let timeChart, dailyChart, areaChart, heatmapChart, weeklyChart;
+
+        function clearFilter() {
+            document.getElementById('dateFilter').value = '';
+            loadDashboard();
+        }
+
+        async function loadDashboard() {
+            try {
+                const selectedDate = document.getElementById('dateFilter').value;
+                const url = selectedDate ? `/api/analytics?date=${selectedDate}` : '/api/analytics';
+                
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (data.error) {
+                    document.querySelector('.container').innerHTML += '<p class="error">No data available. Please enter some data first.</p>';
+                    return;
+                }
+
+                // Destroy existing charts
+                if (timeChart) timeChart.destroy();
+                if (dailyChart) dailyChart.destroy();
+                if (areaChart) areaChart.destroy();
+                if (heatmapChart) heatmapChart.destroy();
+                if (weeklyChart) weeklyChart.destroy();
+
+                // Update sustainability metrics
+                document.getElementById('totalUsage').textContent = data.totalUsage.toLocaleString();
+                document.getElementById('weeklyUsage').textContent = data.weeklyUsage.toLocaleString();
+                document.getElementById('waterSaved').textContent = data.waterSaved >= 0 ? `+${data.waterSaved.toFixed(0)}L` : `${data.waterSaved.toFixed(0)}L`;
+                document.getElementById('waterSaved').style.color = data.waterSaved >= 0 ? '#2ecc71' : '#e74c3c';
+                
+                // Efficiency score
+                document.getElementById('efficiencyScore').textContent = data.efficiencyScore.toFixed(0);
+                document.getElementById('efficiencyCategory').textContent = data.efficiencyCategory;
+                const effCard = document.querySelector('.efficiency-card');
+                if (data.efficiencyCategory === 'Excellent') {
+                    effCard.style.background = 'linear-gradient(135deg, #2ecc71 0%, #27ae60 100%)';
+                } else if (data.efficiencyCategory === 'Moderate') {
+                    effCard.style.background = 'linear-gradient(135deg, #f39c12 0%, #e67e22 100%)';
+                } else {
+                    effCard.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                }
+
+                // Other stats
+                document.getElementById('peakTime').textContent = data.peakTime;
+                document.getElementById('perStudentDaily').textContent = data.perStudentDaily.toFixed(2);
+                
+                // Tank refill prediction
+                if (data.tankRefillHours) {
+                    document.getElementById('tankRefillHours').textContent = data.tankRefillHours;
+                    if (data.tankRefillHours < 2) {
+                        document.getElementById('tankRefillCard').style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                    }
+                } else {
+                    document.getElementById('tankRefillHours').textContent = 'N/A';
+                }
+
+                // Show abnormal alert
+                if (data.abnormal) {
+                    const alertBox = document.getElementById('alertBox');
+                    alertBox.textContent = '⚠️ Possible water leakage or abnormal water usage detected!';
+                    alertBox.style.display = 'block';
+                }
+
+                // Heatmap Chart
+                const heatmapLabels = data.heatmapData.map(d => `${d.hour}:00`);
+                const heatmapValues = data.heatmapData.map(d => d.usage);
+                const maxHeatmap = Math.max(...heatmapValues);
+                const heatmapColors = heatmapValues.map(v => {
+                    const ratio = v / maxHeatmap;
+                    if (ratio > 0.7) return '#e74c3c';
+                    if (ratio > 0.4) return '#f39c12';
+                    return '#2ecc71';
+                });
+
+                const heatmapCtx = document.getElementById('heatmapChart').getContext('2d');
+                heatmapChart = new Chart(heatmapCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: heatmapLabels,
+                        datasets: [{
+                            label: 'Avg Usage (L)',
+                            data: heatmapValues,
+                            backgroundColor: heatmapColors
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+
+                // Time series chart with abnormal highlighting
+                const timeLabels = data.timeSeries.map(d => `${d.date} ${d.time}`);
+                const timeData = data.timeSeries.map(d => d.usage);
+                const avgUsage = timeData.reduce((a, b) => a + b, 0) / timeData.length;
+                const pointColors = timeData.map(v => v > avgUsage * 1.4 ? '#e74c3c' : '#3498db');
+                
+                const timeCtx = document.getElementById('timeChart').getContext('2d');
+                timeChart = new Chart(timeCtx, {
+                    type: 'line',
+                    data: {
+                        labels: timeLabels,
+                        datasets: [{
+                            label: 'Water Usage (L)',
+                            data: timeData,
+                            borderColor: '#3498db',
+                            backgroundColor: 'rgba(52, 152, 219, 0.1)',
+                            tension: 0.4,
+                            pointBackgroundColor: pointColors,
+                            pointRadius: 5
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true
+                    }
+                });
+
+                // Daily chart
+                const dailyLabels = Object.keys(data.dailyUsage);
+                const dailyData = Object.values(data.dailyUsage);
+                
+                const dailyCtx = document.getElementById('dailyChart').getContext('2d');
+                dailyChart = new Chart(dailyCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: dailyLabels,
+                        datasets: [{
+                            label: 'Daily Usage (L)',
+                            data: dailyData,
+                            backgroundColor: '#2ecc71'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true
+                    }
+                });
+
+                // Area chart
+                const areaLabels = Object.keys(data.areaUsage);
+                const areaData = Object.values(data.areaUsage);
+                
+                const areaCtx = document.getElementById('areaChart').getContext('2d');
+                areaChart = new Chart(areaCtx, {
+                    type: 'pie',
+                    data: {
+                        labels: areaLabels,
+                        datasets: [{
+                            data: areaData,
+                            backgroundColor: ['#3498db', '#e74c3c', '#f39c12', '#9b59b6']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true
+                    }
+                });
+
+                // Weekly trend chart
+                const weeklyLabels = dailyLabels.slice(-7);
+                const weeklyData = dailyData.slice(-7);
+                
+                const weeklyCtx = document.getElementById('weeklyChart').getContext('2d');
+                weeklyChart = new Chart(weeklyCtx, {
+                    type: 'line',
+                    data: {
+                        labels: weeklyLabels,
+                        datasets: [{
+                            label: 'Weekly Trend (L)',
+                            data: weeklyData,
+                            borderColor: '#9b59b6',
+                            backgroundColor: 'rgba(155, 89, 182, 0.1)',
+                            tension: 0.4,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true
+                    }
+                });
+
+                // Suggestions
+                const suggestionsList = document.getElementById('suggestionsList');
+                data.suggestions.forEach(suggestion => {
+                    const li = document.createElement('li');
+                    li.textContent = suggestion;
+                    suggestionsList.appendChild(li);
+                });
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+            }
+        }
+
+        loadDashboard();
+    </script>
+</body>
+</html>
